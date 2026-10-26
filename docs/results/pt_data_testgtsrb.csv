@@ -1,0 +1,5 @@
+model,imgsz,precision,recall,mAP50,mAP50-95,AP50_GioiHan60,AP50_VongXuyen,AP50_DuongCam,AP50_CamDiNguocChieu,AP50_Stop,cpu_ms,size_MB
+tsr5_gtsrb.pt,640,0.9968,0.9775,0.9939,0.9642,0.995,0.995,0.9947,0.9945,0.9903,,
+tsr5_vn.pt,640,0.4399,0.312,0.2752,0.1997,0.0226,0.5063,0.0,0.552,0.295,,
+tsr5_vn_gtsrb.pt,640,0.9916,0.9787,0.9865,0.9513,0.995,0.995,0.9836,0.9743,0.9844,,
+baseline_pixel_128.onnx,128,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,2.5,12.1

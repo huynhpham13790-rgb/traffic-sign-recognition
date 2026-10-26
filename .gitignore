@@ -1,0 +1,12 @@
+# dữ liệu & kết quả huấn luyện (lớn, tái tạo được)
+datasets/
+runs/
+weights/
+*.pt
+!models/*.pt
+__pycache__/
+.venv/
+
+# C++
+deploy/cpp/build/
+deploy/cpp/third_party/

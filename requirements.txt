@@ -1,0 +1,9 @@
+# Huấn luyện (PC có GPU). PyTorch cài theo CUDA của máy, ví dụ:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+ultralytics>=8.3
+onnx>=1.16
+onnxslim
+onnxruntime>=1.18
+opencv-python
+numpy
+pillow
