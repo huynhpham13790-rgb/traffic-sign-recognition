@@ -1,0 +1,3 @@
+model,imgsz,precision,recall,mAP50,mAP50-95,AP50_GioiHan50,AP50_GioiHan60,AP50_CamDiNguocChieu,AP50_VongXuyen,cpu_ms,size_MB
+best.pt,640,0.9865,0.986,0.9893,0.9568,0.993,0.9942,0.975,0.995,,
+tsr_416_int8.onnx,416,0.9726,0.9393,0.9681,0.8922,0.9862,0.9675,0.9544,0.9644,9.54,6.11

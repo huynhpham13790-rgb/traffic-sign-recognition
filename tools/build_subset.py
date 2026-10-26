@@ -1,9 +1,11 @@
-"""Tạo bộ dữ liệu 5 lớp trọng tâm từ bộ VN (đã làm sạch) và GTSRB.
+"""Tạo bộ dữ liệu theo nhóm lớp đích từ bộ VN (đã làm sạch) và GTSRB.
 
-Lớp đích (giữ nguyên thứ tự của hệ thống cũ):
-  0 GioiHan60  1 VongXuyen  2 DuongCam  3 CamDiNguocChieu  4 Stop
+Nhóm lớp (--set):
+  tsr7 (mặc định, theo mục 11.2 thuyết minh): GioiHan40, GioiHan50, GioiHan60, CamDiNguocChieu,
+       CamReTrai, CamRePhai, VongXuyen
+  tsr5 (phiên bản cũ): GioiHan60, VongXuyen, DuongCam, CamDiNguocChieu, Stop
 
-- Ảnh VN: chỉ giữ nhãn của 5 lớp đích, các biển khác bị bỏ nhãn -> ảnh vẫn được dùng làm mẫu âm.
+- Ảnh VN: chỉ giữ nhãn của các lớp đích, các biển khác bị bỏ nhãn -> ảnh vẫn được dùng làm mẫu âm.
 - GTSRB (tuỳ chọn --gtsrb): ảnh crop biển báo được dán ngẫu nhiên lên ảnh nền VN (copy-paste)
   để tạo mẫu phát hiện. Chỉ thêm vào tập train; val/test giữ 100% ảnh thực tế VN.
 - --gtsrb-test: tạo thêm tập test_gtsrb từ GTSRB Test (dán lên ảnh nền val) để đánh giá cả 5 lớp.
@@ -18,10 +20,23 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-NAMES = ["GioiHan60", "VongXuyen", "DuongCam", "CamDiNguocChieu", "Stop"]
-NAMES_VI = ["Giới hạn tốc độ 60km/h", "Vòng xuyến", "Đường cấm", "Cấm đi ngược chiều", "Dừng lại (Stop)"]
-VN_MAP = {12: 0, 56: 1, 0: 3, 64: 4}
-GTSRB_MAP = {3: 0, 40: 1, 15: 2, 17: 3, 14: 4}
+# tên lớp, tên tiếng Việt, ánh xạ id VN -> id đích, ánh xạ id GTSRB -> id đích
+CLASS_SETS = {
+    "tsr7": (
+        ["GioiHan40", "GioiHan50", "GioiHan60", "CamDiNguocChieu", "CamReTrai", "CamRePhai", "VongXuyen"],
+        ["Giới hạn tốc độ 40km/h", "Giới hạn tốc độ 50km/h", "Giới hạn tốc độ 60km/h", "Cấm đi ngược chiều",
+         "Cấm rẽ trái", "Cấm rẽ phải", "Vòng xuyến"],
+        {2: 0, 39: 1, 12: 2, 0: 3, 17: 4, 18: 5, 56: 6},
+        {2: 1, 3: 2, 17: 3, 40: 6},  # GTSRB không có biển 40 km/h và biển cấm rẽ
+    ),
+    "tsr5": (
+        ["GioiHan60", "VongXuyen", "DuongCam", "CamDiNguocChieu", "Stop"],
+        ["Giới hạn tốc độ 60km/h", "Vòng xuyến", "Đường cấm", "Cấm đi ngược chiều", "Dừng lại (Stop)"],
+        {12: 0, 56: 1, 0: 3, 64: 4},
+        {3: 0, 40: 1, 15: 2, 17: 3, 14: 4},
+    ),
+}
+NAMES, NAMES_VI, VN_MAP, GTSRB_MAP = CLASS_SETS["tsr7"]
 
 
 def read_vn(src, split, out_img, out_lab):
@@ -137,8 +152,11 @@ def main():
     ap.add_argument("--gtsrb-test", action="store_true")
     ap.add_argument("--gtsrb-only", action="store_true",
                     help="train/val chỉ gồm ảnh GTSRB dán lên nền VN (không dùng nhãn VN); test vẫn là ảnh VN thật")
+    ap.add_argument("--set", choices=CLASS_SETS, default="tsr7", help="nhóm lớp đích")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
+    global NAMES, NAMES_VI, VN_MAP, GTSRB_MAP
+    NAMES, NAMES_VI, VN_MAP, GTSRB_MAP = CLASS_SETS[args.set]
     rng = random.Random(args.seed)
 
     splits = ["train", "val", "test"]

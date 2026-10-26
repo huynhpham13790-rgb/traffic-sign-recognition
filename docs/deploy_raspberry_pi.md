@@ -10,7 +10,7 @@
 | Cảnh báo | Mỗi khung hình đều có thể kích hoạt | Lọc theo thời gian K/N khung + thời gian chờ → không báo dồn dập, ít báo nhầm |
 
 Lưu ý: mô hình cũ dùng input 128×128 nên rất nhanh nhưng không thấy biển nhỏ/ở xa (xem `dataset.md` §3).
-Mô hình mới dùng 320–416, chọn kích thước theo bảng đánh đổi tốc độ/độ chính xác trong `results.md`.
+Mô hình mới (7 lớp) dùng 320–416, chọn kích thước theo bảng đánh đổi tốc độ/độ chính xác trong `results.md`.
 
 ## 2. Phần cứng & hệ điều hành
 
@@ -48,7 +48,7 @@ cd deploy/cpp
 ./build/tsr --model ../../models/tsr_416_int8.onnx --labels ../../models/classes.csv --source test.jpg --bench 100
 ```
 
-Âm thanh: đặt file `sounds/<id>.wav` (ví dụ `sounds/4.wav` = "Phía trước có biển dừng lại") hoặc
+Âm thanh: đặt file `sounds/<id>.wav` (ví dụ `sounds/2.wav` = "Tốc độ tối đa 60 km/h") hoặc
 `sounds/default.wav`; chương trình gọi `aplay` không chặn.
 
 Tham số cảnh báo: `--window 5 --hits 3` nghĩa là biển phải xuất hiện ở ≥ 3 trong 5 khung gần nhất;

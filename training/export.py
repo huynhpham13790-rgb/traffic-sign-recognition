@@ -43,7 +43,8 @@ def quantize_int8(fp32_path, int8_path, calib_dir, size, n_calib=200):
 
     pre = fp32_path.with_suffix(".pre.onnx")
     quant_pre_process(str(fp32_path), str(pre))
-    # Giữ đầu ra phát hiện (Detect head cuối) ở FP32: lượng tử hoá phần hồi quy toạ độ làm giảm mAP mạnh.
+    # Giữ toàn bộ Detect head ở FP32: chỉ giữ phần giải mã box thì mAP50 bộ 7 lớp tụt 0,90 -> 0,73;
+    # giữ cả head thì bằng FP32 (0,906) mà vẫn nhanh hơn ~20%.
     quantize_static(
         str(pre), str(int8_path), Reader(),
         quant_format=QuantFormat.QDQ,
@@ -58,8 +59,7 @@ def quantize_int8(fp32_path, int8_path, calib_dir, size, n_calib=200):
 def _detect_head_nodes(path):
     import onnx
     m = onnx.load(str(path))
-    # các node phía sau DFL (giải mã box) và concat cuối cùng
-    return [n.name for n in m.graph.node if "/model.22/" in n.name and any(k in n.name for k in ("dfl", "Concat", "Split", "Sigmoid", "Mul", "Add", "Sub", "Div"))]
+    return [n.name for n in m.graph.node if "/model.22/" in n.name]
 
 
 def main():
