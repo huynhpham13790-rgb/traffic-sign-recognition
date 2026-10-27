@@ -139,15 +139,28 @@ Hai video lái xe máy trong nội thành Hà Nội (kênh YouTube "Vietnam Sile
 - Việc cần làm: thêm mẫu âm (biển hạn chế chiều cao, logo, khung báo sai từ video — *hard negative mining*) rồi train lại;
   ngưỡng riêng cho lớp giới hạn tốc độ/vòng xuyến; bộ lọc K/N khung trên thiết bị loại các phát hiện thoáng qua.
 
-## 6. Đo trên Raspberry Pi (cần bổ sung)
+## 6. Đo trên Raspberry Pi 4
 
-Điền sau khi chạy trên thiết bị thật (lệnh: `docs/deploy_raspberry_pi.md` §6):
+Thiết bị: Raspberry Pi 4 Model B 4 GB, Debian 13 (trixie) aarch64, ONNX Runtime 1.20.1, **không tản nhiệt**.
+Suy luận thuần: `--bench 100` trên một ảnh 1280×720 (thời gian gồm tiền/hậu xử lý). Toàn hệ thống: chạy
+`--headless` trên clip demo 720p (đọc video, suy luận, lọc cảnh báo, ghi log).
 
-| Thiết bị | Mô hình | Python (ms / FPS) | C++ (ms / FPS) | FPS toàn hệ thống (camera + hiển thị) | Nhiệt độ CPU |
-|---|---|---|---|---|---|
-| Pi 4 / Pi 5 | `tsr_416_int8.onnx` | | | | |
-| Pi 4 / Pi 5 | `tsr_416.onnx` | | | | |
-| Pi 4 / Pi 5 | `baseline_v1_128.onnx` (cũ) | | | | |
+| Mô hình | mAP50 (VN test) | C++ ms (p50) / FPS | Python ms (p50) / FPS | Toàn hệ thống C++ |
+|---|---|---|---|---|
+| `tsr_320_int8.onnx` | 0,809 | 86,7 / 11,5 | — | 9,7 FPS |
+| `tsr_416_int8.onnx` | 0,906 | 140,8 / 6,6 | 150,3 / 6,4 | 5,2 FPS |
+| `tsr_416.onnx` (FP32) | 0,904 | 203,7 / 4,5 | 227,7 / 4,1 | — |
+| `tsr_640_int8.onnx` | 0,963 | 326,4 / 2,9 | — | — |
+
+Nhận xét:
+- INT8 nhanh hơn FP32 khoảng 1,5 lần ở cùng kích thước 416, không mất độ chính xác.
+- C++ chỉ nhanh hơn Python 6–10 % vì phần lớn thời gian nằm trong ONNX Runtime. Lợi ích chính của bản C++
+  là luồng camera riêng (hình không bị trễ dồn) và chạy ổn định lâu dài, không phải tốc độ suy luận.
+- Cả hai cấu hình đều phát hiện đúng biển "Cấm đi ngược chiều" trong clip và ghi log.
+- Nhiệt độ CPU lên 82–84 °C sau vài phút, Pi báo hạ xung (`vcgencmd get_throttled` = `0xe0008`). p95 của
+  416 INT8 tăng lên 260 ms do hạ xung. **Bắt buộc lắp tản nhiệt + quạt**, sau đó đo lại.
+- Khuyến nghị: dùng `tsr_320_int8` khi cần mượt (≈10 FPS, đủ cho xe ≤ 40 km/h); dùng `tsr_416_int8` khi cần
+  bắt biển xa hơn. Pi 5 hoặc bộ tăng tốc (Hailo/Coral) cho phép dùng 416/640 ở tốc độ cao hơn.
 
 ## 7. Tái tạo
 
