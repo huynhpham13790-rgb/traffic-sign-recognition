@@ -141,26 +141,45 @@ Hai video lái xe máy trong nội thành Hà Nội (kênh YouTube "Vietnam Sile
 
 ## 6. Đo trên Raspberry Pi 4
 
-Thiết bị: Raspberry Pi 4 Model B 4 GB, Debian 13 (trixie) aarch64, ONNX Runtime 1.20.1, **không tản nhiệt**.
-Suy luận thuần: `--bench 100` trên một ảnh 1280×720 (thời gian gồm tiền/hậu xử lý). Toàn hệ thống: chạy
-`--headless` trên clip demo 720p (đọc video, suy luận, lọc cảnh báo, ghi log).
+Thiết bị: Raspberry Pi 4 Model B 4 GB, Debian 13 (trixie) aarch64, ONNX Runtime 1.20.1, 4 luồng, **không tản nhiệt**.
+Suy luận thuần: `--bench` trên ảnh 1280×720 (gồm tiền/hậu xử lý), mỗi lần đo bắt đầu khi CPU < 58 °C.
 
-| Mô hình | mAP50 (VN test) | C++ ms (p50) / FPS | Python ms (p50) / FPS | Toàn hệ thống C++ |
-|---|---|---|---|---|
-| `tsr_320_int8.onnx` | 0,809 | 86,7 / 11,5 | — | 9,7 FPS |
-| `tsr_416_int8.onnx` | 0,906 | 140,8 / 6,6 | 150,3 / 6,4 | 5,2 FPS |
-| `tsr_416.onnx` (FP32) | 0,904 | 203,7 / 4,5 | 227,7 / 4,1 | — |
-| `tsr_640_int8.onnx` | 0,963 | 326,4 / 2,9 | — | — |
+| Mô hình | mAP50 (VN test) | C++ ms (p50) / FPS | Python ms (p50) / FPS |
+|---|---|---|---|
+| `tsr_160x512_int8.onnx` + `--roi` (§6.1) | — | **68,6 / 14,6** | — |
+| `tsr_320_int8.onnx` | 0,809 | 86,4 / 11,6 | — |
+| `tsr_224x640_int8.onnx` + `--roi` | — | 118,5 / 7,0 | — |
+| `tsr_416_int8.onnx` | 0,906 | 141,9 / 6,0 | 150,3 / 6,4 |
+| `tsr_416.onnx` (FP32) | 0,904 | 203,7 / 4,5 | 227,7 / 4,1 |
+| `tsr_640_int8.onnx` | 0,963 | 326,4 / 2,9 | — |
+
+FPS toàn hệ thống (C++, `tsr_160x512_int8` + ROI, clip 720p): 12,0 không hiển thị; 10,0 hiển thị toàn màn hình
+800×480; 8,5 khi chạy đúng tốc độ thật (`--realtime`); 5–6 khi vừa hiển thị vừa ghi hình (`--record`).
 
 Nhận xét:
-- INT8 nhanh hơn FP32 khoảng 1,5 lần ở cùng kích thước 416, không mất độ chính xác.
-- C++ chỉ nhanh hơn Python 6–10 % vì phần lớn thời gian nằm trong ONNX Runtime. Lợi ích chính của bản C++
-  là luồng camera riêng (hình không bị trễ dồn) và chạy ổn định lâu dài, không phải tốc độ suy luận.
-- Cả hai cấu hình đều phát hiện đúng biển "Cấm đi ngược chiều" trong clip và ghi log.
-- Nhiệt độ CPU lên 82–84 °C sau vài phút, Pi báo hạ xung (`vcgencmd get_throttled` = `0xe0008`). p95 của
-  416 INT8 tăng lên 260 ms do hạ xung. **Bắt buộc lắp tản nhiệt + quạt**, sau đó đo lại.
-- Khuyến nghị: dùng `tsr_320_int8` khi cần mượt (≈10 FPS, đủ cho xe ≤ 40 km/h); dùng `tsr_416_int8` khi cần
-  bắt biển xa hơn. Pi 5 hoặc bộ tăng tốc (Hailo/Coral) cho phép dùng 416/640 ở tốc độ cao hơn.
+- INT8 nhanh hơn FP32 khoảng 1,45 lần ở 416, không mất độ chính xác. Kết quả INT8 trên ARM khớp với PC.
+- C++ chỉ nhanh hơn Python 6–10 % vì phần lớn thời gian nằm trong ONNX Runtime. Lợi ích chính của C++ là luồng
+  camera riêng (không trễ hình dồn) và chạy ổn định lâu dài.
+- Không tản nhiệt: CPU lên 82–84 °C sau vài phút chạy liên tục và bị hạ xung (`get_throttled` = `0xe0008`),
+  p95 tăng gần gấp đôi. **Bắt buộc lắp tản nhiệt + quạt.**
+- Ở 5–10 FPS, bộ lọc 3/5 khung bỏ sót biển chỉ được nhận rải rác (vòng xuyến) → mặc định đổi thành 2/5.
+
+### 6.1. Vùng quan tâm (ROI) và đầu vào chữ nhật
+
+Ảnh 1280×720 thu về 320 làm biển ở xa (~30 px) chỉ còn 7–8 px nên chỉ bắt được biển ở gần. Trên các clip, biển
+nằm trong dải 20–62 % chiều cao khung hình. Cắt dải 15–70 % (`--roi 0,0.15,1,0.55`) và dùng mô hình xuất với
+đầu vào 160×512 (`training/export.py --imgsz 160x512`): tỉ lệ thu nhỏ 0,4 thay vì 0,25 mà số điểm ảnh ít hơn 320×320.
+
+So sánh trên 9 clip (mọi khung hình, ngưỡng 0,4):
+
+| Cấu hình | Khung phát hiện đúng | Bề rộng biển lúc phát hiện đầu tiên (TB) | Khung sai lớp | Pi 4 FPS |
+|---|---|---|---|---|
+| 320, cả khung | 122 | 47 px | 61 | 11,6 |
+| 416, cả khung | 288 | 46 px | 79 | 6,0 |
+| **160×512 + ROI** | **563** | 40 px | **60** | **14,6** |
+| 224×640 + ROI | 827 | 31 px | 156 | 7,0 |
+
+160×512 + ROI là cấu hình khuyến nghị cho Pi 4: nhanh hơn, bắt sớm hơn, không tăng báo nhầm.
 
 ## 7. Tái tạo
 

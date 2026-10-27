@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
+#include <cstdio>
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
@@ -36,12 +37,16 @@ struct Args {
     std::string source = "0";
     std::string sound_dir;
     std::string log_path;
+    std::string record_path;
     float conf = 0.35f;
     int threads = 4;
     int width = 1280, height = 720;
-    int window = 5, min_hits = 3, cooldown_ms = 4000;
+    int window = 5, min_hits = 2, cooldown_ms = 4000;
     int bench = 0;
     bool headless = false;
+    bool fullscreen = false;
+    bool realtime = false;
+    cv::Rect2f roi{0, 0, 1, 1};
 };
 
 struct Label {
@@ -56,12 +61,17 @@ static void usage() {
                  "  --size WxH          độ phân giải camera (mặc định 1280x720)\n"
                  "  --conf F            ngưỡng tin cậy (0.35)\n"
                  "  --threads N         số luồng ONNX Runtime (4)\n"
-                 "  --window N --hits K cảnh báo khi thấy >= K lần trong N khung (5, 3)\n"
+                 "  --window N --hits K cảnh báo khi thấy >= K lần trong N khung (5, 2)\n"
                  "  --cooldown MS       thời gian chờ trước khi cảnh báo lại cùng biển (4000)\n"
                  "  --sound-dir DIR     phát DIR/<id>.wav (hoặc DIR/default.wav) bằng aplay\n"
                  "  --log PATH          ghi log CSV các cảnh báo\n"
                  "  --bench N           đo tốc độ suy luận N lần trên khung đầu tiên rồi thoát\n"
-                 "  --headless          không mở cửa sổ hiển thị\n";
+                 "  --headless          không mở cửa sổ hiển thị\n"
+                 "  --fullscreen        hiển thị toàn màn hình (co video vừa màn hình nhỏ)\n"
+                 "  --realtime          với file video: bỏ khung để chạy đúng tốc độ thật như camera\n"
+                 "  --roi x,y,w,h       chỉ nhận diện trong vùng này (tỉ lệ 0-1), vd. 0.35,0.05,0.65,0.6\n"
+                 "  --record PATH       ghi hình hiển thị ra PATH (.avi, 960x540), thời điểm từng khung ra PATH.frames.csv\n"
+                 "                      và thời điểm cảnh báo ra PATH.alerts.csv (ms,class_id); dựng lại bằng tools/mux_alerts.py\n";
 }
 
 static Args parse_args(int argc, char** argv) {
@@ -88,6 +98,15 @@ static Args parse_args(int argc, char** argv) {
         else if (k == "--log") a.log_path = next();
         else if (k == "--bench") a.bench = std::stoi(next());
         else if (k == "--headless") a.headless = true;
+        else if (k == "--fullscreen") a.fullscreen = true;
+        else if (k == "--realtime") a.realtime = true;
+        else if (k == "--record") a.record_path = next();
+        else if (k == "--roi") {
+            float v[4];
+            if (std::sscanf(next().c_str(), "%f,%f,%f,%f", &v[0], &v[1], &v[2], &v[3]) != 4)
+                throw std::runtime_error("--roi cần dạng x,y,w,h");
+            a.roi = {v[0], v[1], v[2], v[3]};
+        }
         else if (k == "-h" || k == "--help") {
             usage();
             std::exit(0);
@@ -119,7 +138,7 @@ static bool is_image(const std::string& s) {
 // Đọc camera ở luồng riêng, luôn ghi đè khung hình mới nhất.
 class FrameGrabber {
 public:
-    FrameGrabber(cv::VideoCapture& cap, bool live) : cap_(cap), live_(live) {
+    FrameGrabber(cv::VideoCapture& cap, bool live, bool realtime = false) : cap_(cap), live_(live), realtime_(realtime) {
         if (live_) thread_ = std::thread([this] { loop(); });
     }
     ~FrameGrabber() {
@@ -129,7 +148,17 @@ public:
 
     // Lấy khung hình mới (chờ nếu chưa có). Trả về false khi hết nguồn.
     bool read(cv::Mat& out) {
-        if (!live_) return cap_.read(out);
+        if (!live_) {
+            if (realtime_) {
+                // Bỏ qua các khung đã "trôi qua" trong lúc suy luận, giống camera thật.
+                auto now = std::chrono::steady_clock::now();
+                if (!started_) start_ = now, started_ = true;
+                const double elapsed_ms = std::chrono::duration<double, std::milli>(now - start_).count();
+                while (cap_.get(cv::CAP_PROP_POS_MSEC) + 1 < elapsed_ms)
+                    if (!cap_.grab()) return false;
+            }
+            return cap_.read(out);
+        }
         std::unique_lock<std::mutex> lk(mu_);
         cv_.wait(lk, [this] { return fresh_ || stop_; });
         if (!fresh_) return false;
@@ -158,6 +187,9 @@ private:
 
     cv::VideoCapture& cap_;
     bool live_;
+    bool realtime_;
+    bool started_ = false;
+    std::chrono::steady_clock::time_point start_;
     std::thread thread_;
     std::mutex mu_;
     std::condition_variable cv_;
@@ -244,12 +276,38 @@ int main(int argc, char** argv) try {
     }
 
     AlertFilter filter(args.window, args.min_hits, std::chrono::milliseconds(args.cooldown_ms));
-    FrameGrabber grabber(cap, is_cam || is_gst);
+    FrameGrabber grabber(cap, is_cam || is_gst, args.realtime);
     double fps = 0;
     auto last = Clock::now();
 
+    // Ghi mỗi khung đã xử lý đúng một lần kèm thời điểm; dựng lại tốc độ thật trên máy tính
+    // (nén lặp khung trên Pi làm FPS tụt còn 1-2).
+    cv::VideoWriter rec;
+    std::ofstream rec_alerts, rec_frames;
+    cv::Mat rec_frame;
+    const auto t0 = Clock::now();
+    const auto ms_since_start = [&] {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - t0).count();
+    };
+    if (!args.record_path.empty()) {
+        rec_alerts.open(args.record_path + ".alerts.csv");
+        rec_frames.open(args.record_path + ".frames.csv");
+    }
+
+    const std::string win = "Traffic Sign Recognition";
+    if (!args.headless) {
+        // WINDOW_NORMAL: ảnh được co theo kích thước cửa sổ, không bị cắt trên màn hình nhỏ (vd. 800x480).
+        cv::namedWindow(win, cv::WINDOW_NORMAL | cv::WINDOW_KEEPRATIO);
+        if (args.fullscreen) cv::setWindowProperty(win, cv::WND_PROP_FULLSCREEN, cv::WINDOW_FULLSCREEN);
+    }
+
     while (grabber.read(frame)) {
-        auto dets = det.detect(frame);
+        // Cắt vùng quan tâm: biển ở xa được phóng to hơn khi đưa vào mô hình.
+        const cv::Rect roi = cv::Rect(int(args.roi.x * frame.cols), int(args.roi.y * frame.rows),
+                                      int(args.roi.width * frame.cols), int(args.roi.height * frame.rows)) &
+                             cv::Rect(0, 0, frame.cols, frame.rows);
+        auto dets = det.detect(frame(roi));
+        for (auto& d : dets) d.box += roi.tl();
 
         for (int cls : filter.update(dets)) {
             float score = 0;
@@ -258,6 +316,8 @@ int main(int argc, char** argv) try {
             const Label& l = labels[cls];
             std::cout << "[CẢNH BÁO] " << l.vi << " (" << std::setprecision(2) << score << ")\n";
             play_sound(args.sound_dir, cls);
+            if (rec_alerts.is_open())
+                rec_alerts << ms_since_start() << "," << cls << "\n";
             if (log.is_open()) log << timestamp() << "," << cls << "," << l.en << "," << l.vi << "," << score << "\n" << std::flush;
         }
 
@@ -267,6 +327,7 @@ int main(int argc, char** argv) try {
         fps = fps == 0 ? 1.0 / dt : 0.9 * fps + 0.1 / dt;
 
         if (!args.headless) {
+            if (roi.area() < frame.cols * frame.rows) cv::rectangle(frame, roi, {255, 200, 0}, 1);
             for (const auto& d : dets) {
                 cv::rectangle(frame, d.box, {0, 255, 0}, 2);
                 // putText của OpenCV không hỗ trợ dấu tiếng Việt -> hiển thị tên tiếng Anh.
@@ -277,7 +338,16 @@ int main(int argc, char** argv) try {
             std::ostringstream f;
             f << "FPS " << std::fixed << std::setprecision(1) << fps;
             cv::putText(frame, f.str(), {10, 30}, cv::FONT_HERSHEY_SIMPLEX, 1.0, {0, 0, 255}, 2);
-            cv::imshow("Traffic Sign Recognition", frame);
+            cv::imshow(win, frame);
+        }
+        if (!args.record_path.empty()) {
+            cv::resize(frame, rec_frame, {960, 540}, 0, 0, cv::INTER_AREA);
+            if (!rec.isOpened())
+                rec.open(args.record_path, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 10, rec_frame.size());
+            rec.write(rec_frame);
+            rec_frames << ms_since_start() << "\n";
+        }
+        if (!args.headless) {
             if ((cv::waitKey(1) & 0xFF) == 'q') break;
         }
     }

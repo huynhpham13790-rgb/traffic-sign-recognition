@@ -20,15 +20,16 @@ class Detector:
         so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         self.sess = ort.InferenceSession(path, so, providers=["CPUExecutionProvider"])
         self.inp = self.sess.get_inputs()[0]
-        self.size = self.inp.shape[2]
+        self.h, self.w = self.inp.shape[2], self.inp.shape[3]
+        self.size = max(self.h, self.w)
         self.conf, self.iou = conf, iou
 
     def detect(self, bgr):
         h, w = bgr.shape[:2]
-        r = min(self.size / h, self.size / w)
+        r = min(self.h / h, self.w / w)
         nh, nw = round(h * r), round(w * r)
-        top, left = (self.size - nh) // 2, (self.size - nw) // 2
-        canvas = np.full((self.size, self.size, 3), 114, np.uint8)
+        top, left = (self.h - nh) // 2, (self.w - nw) // 2
+        canvas = np.full((self.h, self.w, 3), 114, np.uint8)
         canvas[top:top + nh, left:left + nw] = cv2.resize(bgr, (nw, nh))
         x = canvas[:, :, ::-1].transpose(2, 0, 1)[None].astype(np.float32) / 255.0
         out = self.sess.run(None, {self.inp.name: x})[0][0]
@@ -45,7 +46,7 @@ class Detector:
             m = scores >= self.conf
             b, scores, cls = out[m, :4], scores[m], cls[m]
             if len(b) and b.max() <= 1.0:
-                b = b * self.size
+                b = b * [self.w, self.h, self.w, self.h]
             boxes = np.stack([b[:, 0] - b[:, 2] / 2, b[:, 1] - b[:, 3] / 2, b[:, 0] + b[:, 2] / 2, b[:, 1] + b[:, 3] / 2], 1)
             xywh = np.concatenate([boxes[:, :2], boxes[:, 2:] - boxes[:, :2]], 1)
             idx = cv2.dnn.NMSBoxesBatched(xywh.tolist(), scores.tolist(), cls.tolist(), self.conf, self.iou) if len(boxes) else []

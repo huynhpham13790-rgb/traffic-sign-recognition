@@ -44,14 +44,23 @@ cd deploy/cpp
 ./build/tsr --model ../../models/tsr_416_int8.onnx --labels ../../models/classes.csv --source \
   "libcamerasrc ! video/x-raw,width=1280,height=720,framerate=30/1 ! videoconvert ! video/x-raw,format=BGR ! appsink drop=1 max-buffers=1"
 
+# khuyến nghị cho Pi 4: chỉ nhận diện dải ảnh chứa biển (xem results.md §6.1)
+./build/tsr --model ../../models/tsr_160x512_int8.onnx --labels ../../models/classes.csv     --source 0 --roi 0,0.15,1,0.55 --sound-dir sounds
+
+# trình diễn bằng video trên màn hình nhỏ: đúng tốc độ thật, toàn màn hình, ghi lại để dựng video có tiếng
+./build/tsr --model ../../models/tsr_160x512_int8.onnx --labels ../../models/classes.csv --source clip.mp4     --roi 0,0.15,1,0.55 --realtime --fullscreen --sound-dir sounds --record demo.avi
+# trên máy tính: python tools/mux_alerts.py demo.avi --sounds deploy/cpp/sounds --out demo.mp4
+
 # đo tốc độ suy luận thuần
 ./build/tsr --model ../../models/tsr_416_int8.onnx --labels ../../models/classes.csv --source test.jpg --bench 100
 ```
 
-Âm thanh: đặt file `sounds/<id>.wav` (ví dụ `sounds/2.wav` = "Tốc độ tối đa 60 km/h") hoặc
-`sounds/default.wav`; chương trình gọi `aplay` không chặn.
+Âm thanh: `deploy/cpp/sounds/<id>.wav` có sẵn giọng đọc tiếng Việt cho 7 lớp (ví dụ `2.wav` = "Chú ý, tốc độ tối đa
+sáu mươi cây số một giờ"); chương trình gọi `aplay` không chặn. Pi 4 xuất tiếng qua jack 3.5 mm
+(`~/.asoundrc`: `defaults.pcm.card 2`); loa trần 3 W 8 Ω cần mạch khuếch đại (vd. PAM8403), tai nghe/loa có
+nguồn thì cắm thẳng.
 
-Tham số cảnh báo: `--window 5 --hits 3` nghĩa là biển phải xuất hiện ở ≥ 3 trong 5 khung gần nhất;
+Tham số cảnh báo: `--window 5 --hits 2` (mặc định) nghĩa là biển phải xuất hiện ở ≥ 2 trong 5 khung gần nhất;
 `--cooldown 4000` nghĩa là cùng một biển chỉ cảnh báo lại sau 4 giây.
 
 Log CSV (`--log`): `time,class_id,name_en,name_vi,score` — phục vụ nội dung "ghi log, phân tích dữ liệu" của đề tài.
@@ -87,7 +96,7 @@ python3 deploy/python/detect.py --model models/tsr_416_int8.onnx --labels models
 ./deploy/cpp/build/tsr          --model models/tsr_416_int8.onnx --labels models/classes.csv --source test.jpg --bench 100
 ```
 
-Ghi kết quả đo trên Pi thật vào bảng ở `results.md` §4.
+Kết quả đo trên Pi 4: `results.md` §6.
 
 ## 7. Gợi ý tăng tốc thêm
 

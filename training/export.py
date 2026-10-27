@@ -15,11 +15,12 @@ from ultralytics import YOLO
 
 
 def letterbox(img, size):
+    H, W = size
     h, w = img.shape[:2]
-    r = min(size / h, size / w)
+    r = min(H / h, W / w)
     nh, nw = round(h * r), round(w * r)
-    out = np.full((size, size, 3), 114, np.uint8)
-    top, left = (size - nh) // 2, (size - nw) // 2
+    out = np.full((H, W, 3), 114, np.uint8)
+    top, left = (H - nh) // 2, (W - nw) // 2
     out[top:top + nh, left:left + nw] = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_LINEAR)
     return out
 
@@ -65,20 +66,22 @@ def _detect_head_nodes(path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--weights", required=True)
-    ap.add_argument("--imgsz", type=int, nargs="+", default=[320, 416, 640])
+    ap.add_argument("--imgsz", nargs="+", default=["320", "416", "640"],
+                    help="N (vuông) hoặc HxW, vd. 224x640 cho dải ảnh ngang dùng với --roi")
     ap.add_argument("--out", type=Path, default=Path("models"))
     ap.add_argument("--int8", action="store_true")
     ap.add_argument("--calib", type=Path, help="thư mục ảnh hiệu chỉnh cho INT8")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
-    for size in args.imgsz:
-        f = Path(YOLO(args.weights).export(format="onnx", imgsz=size, opset=17, simplify=True, dynamic=False))
-        dst = args.out / f"tsr_{size}.onnx"
+    for name in args.imgsz:
+        size = tuple(int(v) for v in name.split("x")) if "x" in name else (int(name), int(name))
+        f = Path(YOLO(args.weights).export(format="onnx", imgsz=list(size), opset=17, simplify=True, dynamic=False))
+        dst = args.out / f"tsr_{name}.onnx"
         shutil.move(f, dst)
         print("FP32:", dst)
         if args.int8:
-            q = args.out / f"tsr_{size}_int8.onnx"
+            q = args.out / f"tsr_{name}_int8.onnx"
             quantize_int8(dst, q, args.calib, size)
             print("INT8:", q)
 
