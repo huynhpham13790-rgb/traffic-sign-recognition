@@ -47,6 +47,9 @@ cd deploy/cpp
 # khuyến nghị cho Pi 4: chỉ nhận diện dải ảnh chứa biển (xem results.md §6.1)
 ./build/tsr --model ../../models/tsr_160x512_int8.onnx --labels ../../models/classes.csv     --source 0 --roi 0,0.15,1,0.55 --sound-dir sounds
 
+# "zoom": xử lý xen kẽ nửa trái/phải của dải ROI, biển lớn hơn ~1,4 lần, cảnh báo sớm hơn ~0,8 s (results.md §6.2)
+./build/tsr --model ../../models/tsr_224x416_int8.onnx --labels ../../models/classes.csv \n    --source 0 --roi 0,0.15,1,0.55 --tiles --sound-dir sounds
+
 # trình diễn bằng video trên màn hình nhỏ: đúng tốc độ thật, toàn màn hình, ghi lại để dựng video có tiếng
 ./build/tsr --model ../../models/tsr_160x512_int8.onnx --labels ../../models/classes.csv --source clip.mp4     --roi 0,0.15,1,0.55 --realtime --fullscreen --sound-dir sounds --record demo.avi
 # trên máy tính: python tools/mux_alerts.py demo.avi --sounds deploy/cpp/sounds --out demo.mp4

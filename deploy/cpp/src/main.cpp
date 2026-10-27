@@ -47,6 +47,7 @@ struct Args {
     bool fullscreen = false;
     bool realtime = false;
     cv::Rect2f roi{0, 0, 1, 1};
+    bool tiles = false;
 };
 
 struct Label {
@@ -70,6 +71,8 @@ static void usage() {
                  "  --fullscreen        hiển thị toàn màn hình (co video vừa màn hình nhỏ)\n"
                  "  --realtime          với file video: bỏ khung để chạy đúng tốc độ thật như camera\n"
                  "  --roi x,y,w,h       chỉ nhận diện trong vùng này (tỉ lệ 0-1), vd. 0.35,0.05,0.65,0.6\n"
+                 "  --tiles             \"zoom\": chia vùng --roi thành 2 nửa trái/phải (chồng 10%), mỗi khung\n"
+                 "                      xử lý xen kẽ một nửa -> biển lớn hơn ~1,4 lần với cùng chi phí\n"
                  "  --record PATH       ghi hình hiển thị ra PATH (.avi, 960x540), thời điểm từng khung ra PATH.frames.csv\n"
                  "                      và thời điểm cảnh báo ra PATH.alerts.csv (ms,class_id); dựng lại bằng tools/mux_alerts.py\n";
 }
@@ -101,6 +104,7 @@ static Args parse_args(int argc, char** argv) {
         else if (k == "--fullscreen") a.fullscreen = true;
         else if (k == "--realtime") a.realtime = true;
         else if (k == "--record") a.record_path = next();
+        else if (k == "--tiles") a.tiles = true;
         else if (k == "--roi") {
             float v[4];
             if (std::sscanf(next().c_str(), "%f,%f,%f,%f", &v[0], &v[1], &v[2], &v[3]) != 4)
@@ -294,6 +298,7 @@ int main(int argc, char** argv) try {
         rec_frames.open(args.record_path + ".frames.csv");
     }
 
+    long frame_idx = 0;
     const std::string win = "Traffic Sign Recognition";
     if (!args.headless) {
         // WINDOW_NORMAL: ảnh được co theo kích thước cửa sổ, không bị cắt trên màn hình nhỏ (vd. 800x480).
@@ -303,9 +308,16 @@ int main(int argc, char** argv) try {
 
     while (grabber.read(frame)) {
         // Cắt vùng quan tâm: biển ở xa được phóng to hơn khi đưa vào mô hình.
-        const cv::Rect roi = cv::Rect(int(args.roi.x * frame.cols), int(args.roi.y * frame.rows),
-                                      int(args.roi.width * frame.cols), int(args.roi.height * frame.rows)) &
-                             cv::Rect(0, 0, frame.cols, frame.rows);
+        cv::Rect roi = cv::Rect(int(args.roi.x * frame.cols), int(args.roi.y * frame.rows),
+                                int(args.roi.width * frame.cols), int(args.roi.height * frame.rows)) &
+                       cv::Rect(0, 0, frame.cols, frame.rows);
+        if (args.tiles) {
+            // Xen kẽ nửa trái [0, 55%] và nửa phải [45%, 100%] của vùng quan tâm.
+            const int w = int(roi.width * 0.55);
+            if (frame_idx % 2) roi.x += roi.width - w;
+            roi.width = w;
+        }
+        ++frame_idx;
         auto dets = det.detect(frame(roi));
         for (auto& d : dets) d.box += roi.tl();
 

@@ -181,6 +181,20 @@ So sánh trên 9 clip (mọi khung hình, ngưỡng 0,4):
 
 160×512 + ROI là cấu hình khuyến nghị cho Pi 4: nhanh hơn, bắt sớm hơn, không tăng báo nhầm.
 
+### 6.2. Zoom xen kẽ hai nửa ROI (`--tiles`)
+
+Chia dải ROI thành ô trái [0; 55 %] và phải [45; 100 %] (chồng 10 %), mỗi khung chỉ xử lý một ô bằng mô hình
+224×416 → tỉ lệ thu nhỏ ≈ 0,57 (so với 0,4). Mô phỏng tốc độ Pi (1/3 khung ≈ 10 FPS), ngưỡng 0,4, lọc 2/5, 9 clip:
+
+| Cấu hình | Clip có cảnh báo | Cảnh báo TB | Bề rộng biển lần đầu | Khung sai lớp | Chi phí |
+|---|---|---|---|---|---|
+| A. dải 160×512 | 9/9 | 4,04 s | 40,8 px | 22 | 1,0 |
+| **B. zoom xen kẽ 224×416** | 9/9 | **3,23 s** | **32,1 px** | 25 | 1,1 |
+| C. zoom cả 2 ô mỗi khung | 9/9 | 3,01 s | 30,9 px | 48 | 2,3 |
+| D. dải 224×640 | 9/9 | 3,66 s | 31,8 px | 49 | 1,7 |
+
+Pi 4: `tsr_224x416_int8` 79,7 ms (12,5 FPS). Demo 5 clip trên Pi: 5/5 cảnh báo đúng, thêm 1 lần nhầm "cấm rẽ phải" (0,51).
+
 ## 7. Tái tạo
 
 ```bash
