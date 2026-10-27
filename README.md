@@ -42,7 +42,7 @@ training/     train.py  export.py (ONNX FP32/INT8)  evaluate.py (mAP + tốc đ�
 deploy/cpp/   chương trình C++ chạy trên Pi (ONNX Runtime + OpenCV)
 deploy/python bản Python dùng để so sánh tốc độ
 models/       best.pt, tsr_{320,416,640}[_int8].onnx, classes.csv, baseline_v1_128.onnx (bản cũ)
-docs/         dataset.md  results.md  deploy_raspberry_pi.md
+docs/         dataset.md  results.md  deploy_raspberry_pi.md  related_work.md
 ```
 
 ## Bắt đầu nhanh
@@ -70,6 +70,7 @@ python training/train.py --data datasets/tsr7/data.yaml --model yolov8n.pt --nam
 - [Dữ liệu](docs/dataset.md): nguồn, làm sạch (loại 549 ảnh rò rỉ), copy-paste GTSRB, thống kê
 - [Kết quả](docs/results.md): so sánh nguồn dữ liệu, đánh đổi kích thước/INT8, biểu đồ
 - [Triển khai Raspberry Pi](docs/deploy_raspberry_pi.md): cài đặt, chạy, systemd, đo FPS
+- [Tổng quan nghiên cứu liên quan](docs/related_work.md): các công trình tương tự, vấn đề còn tồn tại, đóng góp của đề tài
 
 ## Demo bằng video
 
