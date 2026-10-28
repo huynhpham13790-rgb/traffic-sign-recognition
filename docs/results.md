@@ -194,6 +194,25 @@ Chia dải ROI thành ô trái [0; 55 %] và phải [45; 100 %] (chồng 10 %), 
 | D. dải 224×640 | 9/9 | 3,66 s | 31,8 px | 49 | 1,7 |
 
 Pi 4: `tsr_224x416_int8` 79,7 ms (12,5 FPS). Demo 5 clip trên Pi: 5/5 cảnh báo đúng, thêm 1 lần nhầm "cấm rẽ phải" (0,51).
+Thời điểm cảnh báo đo trên Pi, 4 clip chung với cấu hình A: zoom sớm hơn ở cả 4 clip, trung bình 0,53 s
+(0,97 / 0,50 / 0,57 / 0,07 s); thấp hơn mô phỏng vì khi ghi màn hình Pi chỉ đạt 5–6 FPS.
+
+### 6.3. Thử nghiệm mẫu âm khó (không dùng cho bản triển khai)
+
+Lấy 265 khung từ 21 sự kiện báo nhầm của video `6JuxWcAf-wM` (bỏ hộp lớp bị nhầm, giữ phát hiện khác ≥ 0,6 làm nhãn giả);
+video `-dmbiBVPVZg` giữ riêng để đánh giá. Hai phương án: (1) huấn luyện lại 80 epoch, mẫu âm ×2;
+(2) fine-tune mô hình gốc 20 epoch, lr0 = 0,002, mẫu âm ×1 + 160 khung dương nhãn giả (bỏ các đoạn dùng cho demo Pi).
+
+| Chỉ số | Gốc | Huấn luyện lại | Fine-tune |
+|---|---|---|---|
+| mAP50 test VN | 0,961 | 0,957 | 0,959 |
+| Video giữ riêng: sự kiện đúng / sai | 45 / 20 | 39 / 4 | 50 / 7 |
+| Pi, ROI: clip đúng / báo nhầm | **5/5** / 1 | 3/5 / 0 | 4/5 / 0 |
+| Pi, ROI + zoom: clip đúng / báo nhầm | **5/5** / 1 | 2/5 / 0 | 3/5 / 0 |
+
+Mẫu âm giảm mạnh báo nhầm nhưng làm mô hình dè dặt với vòng xuyến (mẫu âm có nhiều vật tròn xanh, video có rất ít
+vòng xuyến thật), ở 5–6 FPS bộ lọc 2/5 bỏ lỡ cảnh báo. Bỏ sót nguy hiểm hơn báo nhầm nên bản triển khai giữ mô hình gốc.
+Hướng tiếp: thêm mẫu dương vòng xuyến hoặc ngưỡng riêng theo lớp.
 
 ## 7. Tái tạo
 
