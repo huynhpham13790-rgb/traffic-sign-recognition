@@ -257,6 +257,8 @@ int main(int argc, char** argv) try {
     const bool is_gst = args.source.find('!') != std::string::npos;
     if (is_cam) {
         cap.open(std::stoi(args.source), cv::CAP_V4L2);
+        // webcam USB: YUYV 720p chỉ ~3-5 FPS, MJPG nén nhanh hơn nhiều
+        cap.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
         cap.set(cv::CAP_PROP_FRAME_WIDTH, args.width);
         cap.set(cv::CAP_PROP_FRAME_HEIGHT, args.height);
         cap.set(cv::CAP_PROP_BUFFERSIZE, 1);
@@ -329,7 +331,7 @@ int main(int argc, char** argv) try {
             std::cout << "[CẢNH BÁO] " << l.vi << " (" << std::setprecision(2) << score << ")\n";
             play_sound(args.sound_dir, cls);
             if (rec_alerts.is_open())
-                rec_alerts << ms_since_start() << "," << cls << "\n";
+                rec_alerts << ms_since_start() << "," << cls << "\n" << std::flush;
             if (log.is_open()) log << timestamp() << "," << cls << "," << l.en << "," << l.vi << "," << score << "\n" << std::flush;
         }
 
@@ -357,7 +359,8 @@ int main(int argc, char** argv) try {
             if (!rec.isOpened())
                 rec.open(args.record_path, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'), 10, rec_frame.size());
             rec.write(rec_frame);
-            rec_frames << ms_since_start() << "\n";
+            // flush: khi dừng bằng Ctrl+C/kill vẫn giữ được thời điểm các khung đã ghi
+            rec_frames << ms_since_start() << "\n" << std::flush;
         }
         if (!args.headless) {
             if ((cv::waitKey(1) & 0xFF) == 'q') break;
